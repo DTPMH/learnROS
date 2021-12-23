@@ -1,0 +1,115 @@
+<launch>
+
+  <!-- size of map, change the size in x, y, z according to your application -->
+  <!-- 设置地图的大小,这个路径规划算法是规定在地图大小确定的地图中的， 可以根据自己的应用更改地图上X，Y，Z的范围 -->
+  <arg name="map_size_x" value="50.0"/>
+  <arg name="map_size_y" value="50.0"/>
+  <arg name="map_size_z" value=" 3.0"/>
+
+  <!-- topic of your odometry such as VIO or LIO -->
+  <arg name="odom_topic" value="/state_ukf/odom" /> 
+
+<!-- <arg name="odom_topic" value="/fcu_odom/odom" />  --> 
+
+  <!-- odom_topic表示的是无人机自身位姿的话题名称，如果需要使用外部定位而不是模拟定位的话，需要做对应的修改 -->
+ <!-- 修改 -->
+<!--  <arg name="odom_topic" value="/vins_estimator/odometry" /> -->
+
+
+  <!-- main algorithm params -->
+  <!-- 下面这个语句是打开这个路径下面的一个xml文件，里面包含的是路径规划模块算法的主体 -->
+  <include file="$(find plan_manage)/launch/kino_algorithm.xml"><!-- 打开的是fast_planner_node -->
+  <!-- 以下是赋值语句，将预选设置好的地图大小以及位姿话题名称赋值 -->
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+    <arg name="map_size_z_" value="$(arg map_size_z)"/>
+    <arg name="odometry_topic" value="$(arg odom_topic)"/>
+
+    <!-- camera pose: transform of camera frame in the world frame -->
+    <!-- depth topic: depth image, 640x480 by default -->
+    <!-- don't set cloud_topic if you already set these ones! -->
+
+    <!-- camera_pose_topic表示的是无人机上的相机对应的实际坐标以及世界位姿 -->
+    <!-- depth_topic表示的是无人机上的相机发布的深度图像的话题 -->  
+<!--
+    <arg name="camera_pose_topic" value="/pcl_render_node/camera_pose"/> 
+    <arg name="depth_topic" value="/pcl_render_node/depth"/> 
+-->
+
+    <arg name="camera_pose_topic" value="/pcl_render_node/camera_pose"/>
+    <arg name="depth_topic" value="/camera/aligned_depth_to_color/image_raw"/>
+
+    <!-- topic of point cloud measurement, such as from LIDAR  -->
+    <!-- don't set camera pose and depth, if you already set this one! -->
+
+    <arg name="cloud_topic" value="/pcl_render_node/cloud"/>
+
+    <!-- cloud_topic话题表示的是无人机局部的点云地图 --> 
+    <!--原来的
+    <arg name="cloud_topic" value="/surfel_fusion/pointcloud"/>   
+    -->
+    <!-- intrinsic params of the depth camera -->
+    <!-- 相机的内参 -->    
+    <arg name="cx" value="316.978"/>
+    <arg name="cy" value="239.796"/>
+    <arg name="fx" value="385.692"/>
+    <arg name="fy" value="383.692"/>
+
+    <!-- maximum velocity and acceleration the drone will reach -->
+    <!-- 设置无人机能够达到的最大速度以及最大加速度，需要根据自己无人机的情况设定 -->
+    <arg name="max_vel" value="2.1" />  <!-- 原来的值为2.1/0.5 -->
+    <arg name="max_acc" value="1.0" />  <!-- 原来的值为1.0/0.7  -->
+
+    <!-- 2: use global waypoints below  -->
+    <!-- 设置无人机的飞行类型，flight_type==1时，是根据在RVIZ上点击给定目标点，若是flight_type==2时，则根据以下的设定给定目标点 -->
+    <arg name="flight_type" value="1" />
+    
+    <!-- global waypoints -->
+    <!-- If flight_type is set to 2, the drone will travel these waypoints one by one -->
+    <!-- 设置目标点的个数 -->
+    <arg name="point_num" value="1" />
+    <!-- 设置目标点的坐标 -->
+    <arg name="point0_x" value="4.8" />
+    <arg name="point0_y" value="0.2" />
+    <arg name="point0_z" value="0.8" />
+
+    <!-- set more waypoints if you need -->
+
+    <arg name="point1_x" value="2.6" />
+    <arg name="point1_y" value="-2.4" />
+    <arg name="point1_z" value="0.8" />
+
+    <arg name="point2_x" value="0.0" />
+    <arg name="point2_y" value="0.0" />
+    <arg name="point2_z" value="0.5" />
+
+
+  </include>-->
+<!-- 打开四旋翼仿真节点，里面包含四旋翼的位姿，控制状态等   -->
+  <!-- use simulator. It should be disabled if a real drone is used --><!-- 打开了其他所有需要的节点 -->
+  <include file="$(find plan_manage)/launch/simulator.xml">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+    <arg name="map_size_z_" value="$(arg map_size_z)"/>
+
+     <arg name="odometry_topic" value="$(arg odom_topic)" />
+  </include>
+
+
+  <!-- trajectory server and trigger, you don't need to change them -->
+  <!-- 打开traj_server节点，该节点的作用是，将规划好的路径以命令的形式发布给无人机，使其根据路径运动。发布的命令有，位置，速度，加速度，偏航角，偏航角速度 -->  
+  <node pkg="plan_manage" name="traj_server" type="traj_server" output="screen"><!-- 打开traj_server节点 -->
+    <remap from="/position_cmd" to="planning/pos_cmd"/>
+
+    <remap from="/odom_world" to="$(arg odom_topic)"/>
+    <param name="traj_server/time_forward" value="1.5" type="double"/>
+  </node>
+<!-- 打开目标点触发模块 --> 
+  <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen"><!-- 打开waypoint_generator节点 -->
+    <remap from="~odom" to="$(arg odom_topic)"/>        
+    <remap from="~goal" to="/move_base_simple/goal"/>
+    <remap from="~traj_start_trigger" to="/traj_start_trigger" />
+    <param name="waypoint_type" value="manual-lonely-waypoint"/>    
+  </node>
+
+</launch>
